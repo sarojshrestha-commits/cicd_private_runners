@@ -1,6 +1,10 @@
 # Self-Hosted GitHub Actions Runner
 
-Docker Compose setup for an org-scoped, ephemeral self-hosted GitHub Actions runner.
+Docker Compose setup for ephemeral self-hosted GitHub Actions runners.
+
+Choose setup based on scope:
+- **Organization-scoped** — runs jobs across entire org
+- **Repository-scoped** — runs jobs for single private repo
 
 The CI/CD setup has two parts:
 
@@ -10,37 +14,76 @@ The CI/CD setup has two parts:
 ## Requirements
 
 - Docker Engine + Docker Compose v2
-- A GitHub org you have admin rights on
-- A PAT (classic) with `admin:org` scope, or a fine-grained token with org self-hosted runner permissions
+- GitHub account with appropriate permissions
+- PAT (Personal Access Token) with correct scopes
 
 ## Setup
 
-```bash
-cp .env.sample .env
-# edit .env with your org name and token
-docker compose up -d
-```
+### Organization Runner
 
-Verify the runner registered:
+For running jobs across entire GitHub organization:
 
 ```bash
-docker compose logs -f org-runner
+cp .env.org.sample .env
+# edit .env with your org name and token (scope: admin:org_hook)
+docker compose -f docker-compose.org.yml up -d
 ```
 
-It should also appear under **Org Settings → Actions → Runners**.
+Verify registration:
+
+```bash
+docker compose -f docker-compose.org.yml logs -f org-runner
+```
+
+Check **Org Settings → Actions → Runners**.
+
+### Repository Runner
+
+For running jobs in a single private repository:
+
+```bash
+cp .env.repo.sample .env
+# edit .env with repo URL and token (scopes: repo, admin:repo_hook)
+docker compose -f docker-compose.repo.yml up -d
+```
+
+Verify registration:
+
+```bash
+docker compose -f docker-compose.repo.yml logs -f repo-runner
+```
+
+Check **Repo Settings → Actions → Runners**.
 
 ## Configuration
 
-Set in `.env`:
+Set in `.env` (use `.env.org.sample` or `.env.repo.sample` as template):
+
+### Organization Runner Variables
 
 | Variable | Description | Example |
 |---|---|---|
 | `ORG_NAME` | GitHub organization name | `my-org` |
-| `ACCESS_TOKEN` | PAT with `admin:org` scope | `ghp_xxxx` |
+| `ACCESS_TOKEN` | PAT with `admin:org_hook` scope | `ghp_xxxx` |
 | `RUNNER_SCOPE` | Registration scope | `org` |
-| `RUNNER_NAME` | Runner name shown in GitHub | `hetzner-org-runner` |
+| `RUNNER_NAME` | Runner name shown in GitHub | `org-runner-1` |
 | `LABELS` | Comma-separated job routing labels | `self-hosted,linux,x64` |
 | `EPHEMERAL` | Deregister + reset after each job | `true` |
+
+### Repository Runner Variables
+
+| Variable | Description | Example |
+|---|---|---|
+| `REPO_URL` | Full GitHub repo URL | `https://github.com/username/repo` |
+| `ACCESS_TOKEN` | PAT with `repo` + `admin:repo_hook` scopes | `ghp_xxxx` |
+| `RUNNER_SCOPE` | Registration scope | `repo` |
+| `RUNNER_NAME` | Runner name shown in GitHub | `repo-runner-1` |
+| `LABELS` | Comma-separated job routing labels | `self-hosted,linux,x64` |
+| `EPHEMERAL` | Deregister + reset after each job | `true` |
+
+**Token Scopes:**
+- Org runners: `admin:org_hook`
+- Repo runners: `repo` + `admin:repo_hook`
 
 `EPHEMERAL=true` is recommended: each job gets a clean runner, so no state leaks between workflow runs.
 
@@ -71,11 +114,20 @@ Leave `RUNNER_NAME` unset when scaling so each container generates its own name.
 
 ## Operations
 
+Replace `docker-compose.org.yml` with `docker-compose.repo.yml` if using repo-scoped runner:
+
 ```bash
-docker compose logs -f org-runner   # tail logs
-docker compose restart org-runner   # restart
-docker compose down                 # stop and deregister
-docker compose pull && docker compose up -d   # update runner image
+# Tail logs
+docker compose -f docker-compose.org.yml logs -f org-runner
+
+# Restart
+docker compose -f docker-compose.org.yml restart org-runner
+
+# Stop and deregister
+docker compose -f docker-compose.org.yml down
+
+# Update runner image
+docker compose -f docker-compose.org.yml pull && docker compose -f docker-compose.org.yml up -d
 ```
 
 ## Security notes
