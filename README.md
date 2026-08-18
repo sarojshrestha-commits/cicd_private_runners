@@ -17,6 +17,10 @@ The CI/CD setup has two parts:
 - GitHub account with appropriate permissions
 - PAT (Personal Access Token) with correct scopes
 
+## Runner image
+
+`Dockerfile` extends `myoung34/github-runner:latest` with `uv` preinstalled, so workflows can use `uv pip install` instead of plain `pip`. Both compose files build this image locally (`build: .`) rather than pulling the base image directly.
+
 ## Setup
 
 ### Organization Runner
@@ -26,7 +30,7 @@ For running jobs across entire GitHub organization:
 ```bash
 cp .env.org.sample .env
 # edit .env with your org name and token (scope: admin:org_hook)
-docker compose -f docker-compose.org.yml up -d
+docker compose -f docker-compose.org.yml up -d --build
 ```
 
 Verify registration:
@@ -44,7 +48,7 @@ For running jobs in a single private repository:
 ```bash
 cp .env.repo.sample .env
 # edit .env with repo URL and token (scopes: repo, admin:repo_hook)
-docker compose -f docker-compose.repo.yml up -d
+docker compose -f docker-compose.repo.yml up -d --build
 ```
 
 Verify registration:
@@ -102,6 +106,24 @@ jobs:
 
 The `runs-on` labels must match `LABELS` in `.env`.
 
+## Docker access inside jobs
+
+Jobs that run `docker build`/`docker push` need access to a Docker daemon. Each compose file mounts a host Docker socket into the runner at `/var/run/docker-host.sock` and sets `DOCKER_HOST=unix:///var/run/docker-host.sock`, so the container's `docker` CLI talks to it automatically — no `sudo` or extra flags needed in workflow steps.
+
+**Check which socket to mount before first run:**
+
+```bash
+docker context ls
+```
+
+If the `*` marks `rootless`, your daemon lives at `/run/user/<uid>/docker.sock`, not `/var/run/docker.sock` — the two are separate daemons on a rootless install. The compose files here are set to `/run/user/1000/docker.sock`; adjust the uid if yours differs. Binding the wrong path doesn't error — dockerd silently mounts an empty placeholder directory instead of the socket, and every `docker` command inside the runner fails with `Cannot connect to the Docker daemon`. If that happens, verify:
+
+```bash
+docker exec <runner-container> stat /var/run/docker-host.sock
+```
+
+It must report type `socket`, not `directory`. We avoid mounting straight to `/var/run/docker.sock` inside the container because the base runner image already has a directory baked in at that exact path, which silently blocks the bind mount the same way.
+
 ## Scaling
 
 Run more runners by scaling the service:
@@ -126,12 +148,17 @@ docker compose -f docker-compose.org.yml restart org-runner
 # Stop and deregister
 docker compose -f docker-compose.org.yml down
 
-# Update runner image
-docker compose -f docker-compose.org.yml pull && docker compose -f docker-compose.org.yml up -d
+# Rebuild runner image (after Dockerfile or base image changes) and restart
+docker compose -f docker-compose.org.yml up -d --build
+
+# Full reset: drop containers, volumes, and orphans, then rebuild
+docker compose -f docker-compose.org.yml down -v --remove-orphans
+docker compose -f docker-compose.org.yml up -d --build
 ```
 
 ## Security notes
 
 - **Never enable these runners for public repositories.** Any fork can open a PR that runs arbitrary code on your host.
-- The container mounts `/var/run/docker.sock` so jobs can build images. This grants jobs root-equivalent access to the Docker host — only run trusted workflows from private repos in your org.
-- `.env` holds a token that can administer org runners. It is gitignored; do not commit it, and rotate the token if it leaks.
+- The container mounts the host Docker socket so jobs can build images. This grants jobs root-equivalent access to the Docker host — only run trusted workflows from private repos in your org.
+- `.env` holds a token that can administer org/repo runners. It is gitignored; do not commit it, and rotate the token if it leaks.
+- Never commit a real token into a `.env.*.sample` file, even temporarily — GitHub push protection will block the push, but rotate the token anyway if one ever lands in a commit.
