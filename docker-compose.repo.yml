@@ -1,6 +1,7 @@
 services:
   repo-runner:
-    image: myoung34/github-runner:latest
+    build: .
+    image: github-runner-uv:latest
     restart: unless-stopped
     environment:
       REPO_URL: "${REPO_URL}"

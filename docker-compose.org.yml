@@ -1,6 +1,7 @@
 services:
   org-runner:
-    image: myoung34/github-runner:latest
+    build: .
+    image: github-runner-uv:latest
     restart: unless-stopped
     environment:
       ORG_NAME: "${ORG_NAME}"
