@@ -1,0 +1,17 @@
+services:
+  org-runner:
+    image: myoung34/github-runner:latest
+    restart: unless-stopped
+    environment:
+      ORG_NAME: "${ORG_NAME}"
+      ACCESS_TOKEN: "${ACCESS_TOKEN}"
+      RUNNER_SCOPE: "${RUNNER_SCOPE}"
+      RUNNER_NAME: "${RUNNER_NAME}"
+      LABELS: "${LABELS}"
+      EPHEMERAL: "${EPHEMERAL}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - org-runner-work:/tmp/runner/work
+
+volumes:
+  org-runner-work:
