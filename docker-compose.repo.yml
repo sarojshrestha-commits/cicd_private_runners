@@ -10,8 +10,9 @@ services:
       RUNNER_NAME: "${RUNNER_NAME}"
       LABELS: "${LABELS}"
       EPHEMERAL: "${EPHEMERAL}"
+      DOCKER_HOST: "unix:///var/run/docker-host.sock"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /run/user/1000/docker.sock:/var/run/docker-host.sock
       - repo-runner-work:/tmp/runner/work
 
 volumes:
